@@ -526,7 +526,10 @@ int jack_process(jack_nframes_t nframes, void *arg) {
 	jack_midi_event_t ev;
 	while (jack_midi_event_get(&ev, input_port_buffer, i)==0) {
 		//Ignore SysEx messages
-		if (ev.buffer[0]==SYSTEM_EXCLUSIVE) continue;
+		if (ev.buffer[0]==SYSTEM_EXCLUSIVE) {
+			i++;
+			continue;
+		}
 
 		event_type=ev.buffer[0] >> 4;
 		event_chan=ev.buffer[0] & 0xF;
