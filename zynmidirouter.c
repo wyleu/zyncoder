@@ -102,7 +102,7 @@ int end_midi_router() {
 //MIDI special featured channels
 
 void set_midi_master_chan(int chan) {
-	if (chan>15 || chan<0) {
+	if (chan>15 || chan<-1) {
 		fprintf (stderr, "ZynMidiRouter: MIDI Master channel (%d) is out of range!\n",chan);
 		return;
 	}
@@ -112,15 +112,13 @@ void set_midi_master_chan(int chan) {
 int get_midi_master_chan() {
 	return midi_filter.master_chan;
 }
-
 void set_midi_active_chan(int chan) {
-	if (chan>15 || chan<0) {
+	if (chan>15 || chan<-1) {
 		fprintf (stderr, "ZynMidiRouter: MIDI Active channel (%d) is out of range!\n",chan);
 		return;
 	}
 	midi_filter.active_chan=chan;
 }
-
 int get_midi_active_chan() {
 	return midi_filter.active_chan;
 }
@@ -317,10 +315,10 @@ void reset_midi_filter_cc_map() {
 }
 
 //MIDI Learning Mode
-
 void set_midi_learning_mode(int mlm) {
 	midi_learning_mode=mlm;
 }
+
 
 //-----------------------------------------------------------------------------
 // Swap CC mapping => GRAPH THEORY
@@ -499,7 +497,7 @@ int zmop_init(int iz, char *name, int ch) {
 	}
 	//Set init values
 	zmops[iz].n_data=0;
-	zmops[iz].midi_channel=-1;
+	zmops[iz].midi_channel=ch;
 	zmops[iz].n_connections=0;
 	return 1;
 }
@@ -621,8 +619,8 @@ int init_jack_midi(char *name) {
 			if (!zmip_set_forward(ZMIP_NET, i, 1)) return 0;
 		}
 		if (!zmip_set_forward(ZMIP_SEQ, i, 1)) return 0;
-		//TODO => Define ZMIP_CTRL behaviour
 	}
+	// ZMIP_CTRL is not routed to any output port, only captured by Zynthian UI
 
 	jack_ring_output_buffer = jack_ringbuffer_create(JACK_MIDI_BUFFER_SIZE);
 	// lock the buffer into memory, this is *NOT* realtime safe, do it before using the buffer!
@@ -674,6 +672,7 @@ int jack_process_zmip(int iz, jack_nframes_t nframes) {
 	int clone_from_chan=-1;
 	int clone_to_chan=-1;
 	while (1) {
+
 		//Test if reached max num of events
 		if (i>nframes) {
 			fprintf (stderr, "ZynMidiRouter: Error processing jack midi input events: TOO MANY EVENTS\n");
@@ -702,8 +701,9 @@ int jack_process_zmip(int iz, jack_nframes_t nframes) {
 			else {
 				event_type=ev.buffer[0] >> 4;
 				event_chan=ev.buffer[0] & 0xF;
+
 				//Capture events for UI: MASTER CHANNEL
-				if (event_chan==midi_filter.master_chan) {
+				if ((zmip->flags & FLAG_ZMIP_UI) && event_chan==midi_filter.master_chan) {
 					write_zynmidi((ev.buffer[0]<<16)|(ev.buffer[1]<<8)|(ev.buffer[2]));
 					continue;
 				}
@@ -711,6 +711,11 @@ int jack_process_zmip(int iz, jack_nframes_t nframes) {
 				if (midi_filter.active_chan>=0) {
 					ev.buffer[0]=(ev.buffer[0] & 0xF0) | (midi_filter.active_chan & 0x0F);
 					event_chan=midi_filter.active_chan;
+				}
+				//Capture events for UI: Program Change
+				if ((zmip->flags & FLAG_ZMIP_UI) && event_type==PROG_CHANGE) {
+					write_zynmidi((ev.buffer[0]<<16)|(ev.buffer[1]<<8)|(ev.buffer[2]));
+					continue;
 				}
 			}
 
@@ -749,9 +754,9 @@ int jack_process_zmip(int iz, jack_nframes_t nframes) {
 			//fprintf (stdout, "NEXT CLONE %x => %d, %d\n",event_type, clone_from_chan, clone_to_chan);
 		}
 
-		//fprintf(stdout, "MIDI MSG => %x, %x\n", ev.buffer[0], ev.buffer[1]);
+		//fprintf(stdout, "%x, %x\n", ev.buffer[0], ev.buffer[1]);
 
-		//Capture events for UI: before filtering => [Control-Change]
+		//Capture events for UI: before filtering => [Control-Change for MIDI learning]
 		ui_event=0;
 		if ((zmip->flags & FLAG_ZMIP_UI) && midi_learning_mode && event_type==CTRL_CHANGE) {
 			ui_event=(ev.buffer[0]<<16)|(ev.buffer[1]<<8)|(ev.buffer[2]);
@@ -786,20 +791,20 @@ int jack_process_zmip(int iz, jack_nframes_t nframes) {
 					ev.buffer[2]=event_val;
 					ev.size=3;
 				}
-				//fprintf (stdout, "%x, %x\n",ev.buffer[0],ev.buffer[1]);
+				//fprintf (stdout, "MIDI MSG => %x, %x\n",ev.buffer[0],ev.buffer[1]);
 			}
 		}
 
 		//MIDI CC messages
-		if ((zmip->flags & FLAG_ZMIP_ZYNCODER) && event_type==CTRL_CHANGE) {
-			//Update zyncoder value => TODO Optimize this fragment!!!
-			for (j=0;j<MAX_NUM_ZYNCODERS;j++) {
-				if (zyncoders[j].enabled && zyncoders[j].midi_chan==event_chan && zyncoders[j].midi_ctrl==event_num) {
-					zyncoders[j].value=event_val;
-					zyncoders[j].subvalue=event_val*ZYNCODER_TICKS_PER_RETENT;
-					//fprintf (stdout, "ZynMidiRouter: MIDI CC (%x, %x) => UI",ev.buffer[0],ev.buffer[1]);
-				}
+		if (event_type==CTRL_CHANGE) {
+			//Set zyncoder values
+			if (zmip->flags & FLAG_ZMIP_ZYNCODER) {
+				midi_event_zyncoders(event_chan, event_num, event_val);
 			}
+			//Ignore Bank Change events when FLAG_ZMIP_UI
+			//if ((zmip->flags & FLAG_ZMIP_UI) && (event_num==0 || event_num==32)) {
+			//	continue;
+			//}
 		}
 
 		//Transpose Note-on/off messages
@@ -834,8 +839,8 @@ int jack_process_zmip(int iz, jack_nframes_t nframes) {
 			}
 		}
 
-		//Capture events for UI: after filtering => [Note-Off, Note-On, Program-Change]
-		if (!ui_event && (zmip->flags & FLAG_ZMIP_UI) && (event_type==NOTE_OFF || event_type==NOTE_ON || event_type==PROG_CHANGE || event_type==CTRL_CHANGE)) {
+		//Capture events for UI: after filtering => [Note-Off, Note-On, Control-Change]
+		if (!ui_event && (zmip->flags & FLAG_ZMIP_UI) && (event_type==NOTE_OFF || event_type==NOTE_ON || event_type==CTRL_CHANGE)) {
 			ui_event=(ev.buffer[0]<<16)|(ev.buffer[1]<<8)|(ev.buffer[2]);
 		}
 
@@ -945,6 +950,8 @@ int jack_process_zmop(int iz, jack_nframes_t nframes) {
 // Jack Process
 //-----------------------------------------------------
 
+int forward_internal_midi_data();
+
 int jack_process(jack_nframes_t nframes, void *arg) {
 	int i;
 
@@ -1021,38 +1028,7 @@ int forward_internal_midi_data() {
 }
 
 //-----------------------------------------------------------------------------
-// MIDI Internal Ouput Events Buffer => UI
-//-----------------------------------------------------------------------------
-
-uint32_t zynmidi_buffer[ZYNMIDI_BUFFER_SIZE];
-int zynmidi_buffer_read;
-int zynmidi_buffer_write;
-
-int init_zynmidi_buffer() {
-	int i;
-	for (i=0;i<ZYNMIDI_BUFFER_SIZE;i++) zynmidi_buffer[i]=0;
-	zynmidi_buffer_read=zynmidi_buffer_write=0;
-	return 1;
-}
-
-int write_zynmidi(uint32_t ev) {
-	int nptr=zynmidi_buffer_write+1;
-	if (nptr>=ZYNMIDI_BUFFER_SIZE) nptr=0;
-	if (nptr==zynmidi_buffer_read) return 0;
-	zynmidi_buffer[zynmidi_buffer_write]=ev;
-	zynmidi_buffer_write=nptr;
-	return 1;
-}
-
-uint32_t read_zynmidi() {
-	if (zynmidi_buffer_read==zynmidi_buffer_write) return 0;
-	uint32_t ev=zynmidi_buffer[zynmidi_buffer_read++];
-	if (zynmidi_buffer_read>=ZYNMIDI_BUFFER_SIZE) zynmidi_buffer_read=0;
-	return ev;
-}
-
-//-----------------------------------------------------------------------------
-// MIDI Send Functions
+// MIDI Internal Input: Send Functions <= UI and internal
 //-----------------------------------------------------------------------------
 
 int zynmidi_send_note_off(uint8_t chan, uint8_t note, uint8_t vel) {
@@ -1099,6 +1075,46 @@ int zynmidi_send_master_ccontrol_change(uint8_t ctrl, uint8_t val) {
 	if (midi_filter.master_chan>=0) {
 		return zynmidi_send_ccontrol_change(midi_filter.master_chan, ctrl, val);
 	}
+}
+
+//-----------------------------------------------------------------------------
+// MIDI Internal Ouput Events Buffer => UI
+//-----------------------------------------------------------------------------
+
+uint32_t zynmidi_buffer[ZYNMIDI_BUFFER_SIZE];
+int zynmidi_buffer_read;
+int zynmidi_buffer_write;
+
+int init_zynmidi_buffer() {
+	int i;
+	for (i=0;i<ZYNMIDI_BUFFER_SIZE;i++) zynmidi_buffer[i]=0;
+	zynmidi_buffer_read=zynmidi_buffer_write=0;
+	return 1;
+}
+
+int write_zynmidi(uint32_t ev) {
+	int nptr=zynmidi_buffer_write+1;
+	if (nptr>=ZYNMIDI_BUFFER_SIZE) nptr=0;
+	if (nptr==zynmidi_buffer_read) return 0;
+	zynmidi_buffer[zynmidi_buffer_write]=ev;
+	zynmidi_buffer_write=nptr;
+	return 1;
+}
+
+uint32_t read_zynmidi() {
+	if (zynmidi_buffer_read==zynmidi_buffer_write) return 0;
+	uint32_t ev=zynmidi_buffer[zynmidi_buffer_read++];
+	if (zynmidi_buffer_read>=ZYNMIDI_BUFFER_SIZE) zynmidi_buffer_read=0;
+	return ev;
+}
+
+//-----------------------------------------------------------------------------
+// MIDI Internal Output: Send Functions => UI
+//-----------------------------------------------------------------------------
+
+int write_zynmidi_ccontrol_change(uint8_t chan, uint8_t ctrl, uint8_t val) {
+	uint32_t ev = ((0xB0 | (chan & 0x0F)) << 16) | (ctrl << 8) | val;
+	return write_zynmidi(ev);
 }
 
 //-----------------------------------------------------------------------------

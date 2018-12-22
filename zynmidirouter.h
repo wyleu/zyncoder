@@ -187,7 +187,7 @@ uint8_t get_midi_filter_cc_swap(uint8_t chan, uint8_t num);
 
 #define ZMIP_MAIN_FLAGS (FLAG_ZMIP_UI|FLAG_ZMIP_ZYNCODER|FLAG_ZMIP_CLONE|FLAG_ZMIP_FILTER|FLAG_ZMIP_SWAP|FLAG_ZMIP_TRANSPOSE|FLAG_ZMIP_TUNING)
 #define ZMIP_SEQ_FLAGS (FLAG_ZMIP_UI|FLAG_ZMIP_ZYNCODER)
-#define ZMIP_CTRL_FLAGS 0
+#define ZMIP_CTRL_FLAGS (FLAG_ZMIP_UI)
 
 struct zmop_st {
 	jack_port_t *jport;
@@ -231,17 +231,15 @@ int jack_process(jack_nframes_t nframes, void *arg);
 
 #define ZYNMIDI_BUFFER_SIZE 256
 
-//MIDI events => UI
-jack_ringbuffer_t *jack_ring_output_buffer;
-int write_midi_event(uint8_t *event, int event_size);
+//-----------------------------------------------------
+// MIDI Internal Input Event Buffer <= UI and internal
+//-----------------------------------------------------
 
-//UI => MIDI events
-int init_zynmidi_buffer();
-int write_zynmidi(uint32_t ev);
-uint32_t read_zynmidi();
+jack_ringbuffer_t *jack_ring_output_buffer;
+int write_internal_midi_event(uint8_t *event, int event_size);
 
 //-----------------------------------------------------------------------------
-// MIDI Send Functions
+// MIDI Internal Input: Send Functions <= UI and internal
 //-----------------------------------------------------------------------------
 
 int zynmidi_send_note_off(uint8_t chan, uint8_t note, uint8_t vel);
@@ -251,5 +249,19 @@ int zynmidi_send_program_change(uint8_t chan, uint8_t prgm);
 int zynmidi_send_pitchbend_change(uint8_t chan, uint16_t pb);
 
 int zynmidi_send_master_ccontrol_change(uint8_t ctrl, uint8_t val);
+
+//-----------------------------------------------------------------------------
+// MIDI Internal Ouput Events Buffer => UI
+//-----------------------------------------------------------------------------
+
+int init_zynmidi_buffer();
+int write_zynmidi(uint32_t ev);
+uint32_t read_zynmidi();
+
+//-----------------------------------------------------------------------------
+// MIDI Internal Output: Send Functions => UI
+//-----------------------------------------------------------------------------
+
+int write_zynmidi_ccontrol_change(uint8_t chan, uint8_t ctrl, uint8_t val);
 
 //-----------------------------------------------------------------------------

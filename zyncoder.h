@@ -52,6 +52,9 @@ struct zynswitch_st {
 	// note that this status is like the pin_[ab]_last_state for the 
 	// zyncoders
 	volatile uint8_t status;
+
+	uint8_t midi_chan;
+	uint8_t midi_cc;
 };
 struct zynswitch_st zynswitches[MAX_NUM_ZYNSWITCHES];
 
@@ -94,6 +97,8 @@ struct zyncoder_st {
 	unsigned int dtus[ZYNCODER_TICKS_PER_RETENT];
 };
 struct zyncoder_st zyncoders[MAX_NUM_ZYNCODERS];
+
+void midi_event_zyncoders(uint8_t midi_chan, uint8_t midi_ctrl, uint8_t val);
 
 struct zyncoder_st *setup_zyncoder(uint8_t i, uint8_t pin_a, uint8_t pin_b, uint8_t midi_chan, uint8_t midi_ctrl, char *osc_path, unsigned int value, unsigned int max_value, unsigned int step); 
 unsigned int get_value_zyncoder(uint8_t i);

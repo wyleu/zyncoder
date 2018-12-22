@@ -38,19 +38,26 @@
 #include "zynmidirouter.h"
 
 #if defined(MCP23017_ENCODERS) && defined(HAVE_WIRINGPI_LIB)
-	// pins 100-115 are located on our mcp23017
+	// pins 100-115 are located on the MCP23017
 	#define MCP23017_BASE_PIN 100
-	// interrupt pins for the mcp
-	#define MCP23017_INTA_PIN 27
-	#define MCP23017_INTB_PIN 25
+	// define default interrupt pins for the MCP23017
+	#if !defined(MCP23017_INTA_PIN)
+		#define MCP23017_INTA_PIN 27
+	#endif
+	#if !defined(MCP23017_INTB_PIN)
+		#define MCP23017_INTB_PIN 25
+	#endif
+
 	#include <wiringPi.h>
 	#include <mcp23017.h>
 	#include <mcp23x0817.h>
+
 	#define bitRead(value, bit) (((value) >> (bit)) & 0x01)
 	#define bitSet(value, bit) ((value) |= (1UL << (bit)))
 	#define bitClear(value, bit) ((value) &= ~(1UL << (bit)))
 	#define bitWrite(value, bit, bitvalue) (bitvalue ? bitSet(value, bit) : bitClear(value, bit))
 #elif HAVE_WIRINGPI_LIB
+	// pins 100-107 are located on the MCP23008
 	#define MCP23008_BASE_PIN 100
 	#include <wiringPi.h>
 	#include <mcp23008.h>
@@ -105,7 +112,10 @@ unsigned int int_to_int(unsigned int k) {
 
 int init_zyncoder() {
 	int i,j;
-	for (i=0;i<MAX_NUM_ZYNSWITCHES;i++) zynswitches[i].enabled=0;
+	for (i=0;i<MAX_NUM_ZYNSWITCHES;i++) {
+		zynswitches[i].enabled=0;
+		zynswitches[i].midi_cc=0;
+	}
 	for (i=0;i<MAX_NUM_ZYNCODERS;i++) {
 		zyncoders[i].enabled=0;
 		for (j=0;j<ZYNCODER_TICKS_PER_RETENT;j++) zyncoders[i].dtus[j]=0;
@@ -127,7 +137,9 @@ int init_zyncoder() {
 	wiringPiI2CWriteReg8(mcp23017_node->fd, MCP23x17_IODIRB, reg);
 
 	// enable pullups on the unused pins (high two bits on each bank)
-	reg = 0x60;
+	reg = 0xff;
+	//reg = 0xc0;
+	//reg = 0x60;
 	wiringPiI2CWriteReg8(mcp23017_node->fd, MCP23x17_GPPUA, reg);
 	wiringPiI2CWriteReg8(mcp23017_node->fd, MCP23x17_GPPUB, reg);
 
@@ -201,6 +213,17 @@ void update_zynswitch(uint8_t i) {
 #endif
 	if (status==zynswitch->status) return;
 	zynswitch->status=status;
+
+	if (zynswitch->midi_cc>0) {
+		uint8_t val=0;
+		if (status==0) val=127;
+		//Send MIDI event to engines and ouput (ZMOPS)
+		zynmidi_send_ccontrol_change(zynswitch->midi_chan, zynswitch->midi_cc, val);
+		//Update zyncoders
+		midi_event_zyncoders(zynswitch->midi_chan, zynswitch->midi_cc, val);
+		//Send MIDI event to UI
+		write_zynmidi_ccontrol_change(zynswitch->midi_chan, zynswitch->midi_cc, val);
+	}
 
 	struct timespec ts;
 	unsigned long int tsus;
@@ -318,6 +341,19 @@ struct zynswitch_st *setup_zynswitch(uint8_t i, uint8_t pin) {
 	return zynswitch;
 }
 
+int setup_zynswitch_midi(uint8_t i, uint8_t midi_chan, uint8_t midi_cc) {
+	if (i >= MAX_NUM_ZYNSWITCHES) {
+		printf("Zyncoder: Maximum number of zynswitches exceeded: %d\n", MAX_NUM_ZYNSWITCHES);
+		return 0;
+	}
+
+	struct zynswitch_st *zynswitch = zynswitches + i;
+	zynswitch->midi_chan = midi_chan;
+	zynswitch->midi_cc = midi_cc;
+
+	return 1;
+}
+
 unsigned int get_zynswitch_dtus(uint8_t i) {
 	if (i >= MAX_NUM_ZYNSWITCHES) return 0;
 	unsigned int dtus=zynswitches[i].dtus;
@@ -332,6 +368,18 @@ unsigned int get_zynswitch(uint8_t i) {
 //-----------------------------------------------------------------------------
 // Generic Rotary Encoders
 //-----------------------------------------------------------------------------
+
+void midi_event_zyncoders(uint8_t midi_chan, uint8_t midi_ctrl, uint8_t val) {
+	//Update zyncoder value => TODO Optimize this fragment!!!
+	int j;
+	for (j=0;j<MAX_NUM_ZYNCODERS;j++) {
+		if (zyncoders[j].enabled && zyncoders[j].midi_chan==midi_chan && zyncoders[j].midi_ctrl==midi_ctrl) {
+			zyncoders[j].value=val;
+			zyncoders[j].subvalue=val*ZYNCODER_TICKS_PER_RETENT;
+			//fprintf (stdout, "ZynMidiRouter: MIDI CC (%x, %x) => UI",midi_chan,midi_ctrl);
+		}
+	}
+}
 
 void send_zyncoder(uint8_t i) {
 	if (i>=MAX_NUM_ZYNCODERS) return;
@@ -554,6 +602,8 @@ void mcp23017_bank_ISR(uint8_t bank) {
 	int i;
 	uint8_t reg;
 	uint8_t pin_min, pin_max;
+
+	//printf("Zyncoder MCP23017 ISR => %d\n",bank);
 
 	if (bank == 0) {
 		reg = wiringPiI2CReadReg8(mcp23017_node->fd, MCP23x17_GPIOA);
