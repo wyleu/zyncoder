@@ -66,6 +66,8 @@
 	#include "wiringPiEmu.h"
 #endif
 
+//#define DEBUG
+
 //-----------------------------------------------------------------------------
 // Library Initialization
 //-----------------------------------------------------------------------------
@@ -180,7 +182,7 @@ int init_zyncoder() {
 	wiringPiISR(MCP23017_INTB_PIN, INT_EDGE_RISING, mcp23017_bank_ISRs[1]);
 
 #ifdef DEBUG
-	printf("mcp23017 initialized\n");
+	printf("MCP23017 initialized: INTA %d, INTB %d\n",MCP23017_INTA_PIN,MCP23017_INTB_PIN);
 #endif
 #else
 	mcp23008Setup (100, 0x20);
@@ -386,7 +388,10 @@ void send_zyncoder(uint8_t i) {
 	struct zyncoder_st *zyncoder = zyncoders + i;
 	if (zyncoder->enabled==0) return;
 	if (zyncoder->midi_ctrl>0) {
+		//Send to MIDI output
 		zynmidi_send_ccontrol_change(zyncoder->midi_chan,zyncoder->midi_ctrl,zyncoder->value);
+		//Send to MIDI controller feedback => TODO: Reverse Mapping!!
+		ctrlfb_send_ccontrol_change(zyncoder->midi_chan,zyncoder->midi_ctrl,zyncoder->value);
 		//printf("SEND MIDI CHAN %d, CTRL %d = %d\n",zyncoder->midi_chan,zyncoder->midi_ctrl,zyncoder->value);
 	} else if (zyncoder->osc_lo_addr!=NULL && zyncoder->osc_path[0]) {
 		if (zyncoder->step >= 8) {
@@ -603,7 +608,9 @@ void mcp23017_bank_ISR(uint8_t bank) {
 	uint8_t reg;
 	uint8_t pin_min, pin_max;
 
-	//printf("Zyncoder MCP23017 ISR => %d\n",bank);
+#ifdef DEBUG
+	printf("MCP23017 ISR => %d\n",bank);
+#endif
 
 	if (bank == 0) {
 		reg = wiringPiI2CReadReg8(mcp23017_node->fd, MCP23x17_GPIOA);
@@ -647,6 +654,9 @@ void mcp23017_bank_ISR(uint8_t bank) {
 		if (zynswitch->pin >= pin_min && zynswitch->pin <= pin_max) {
 			uint8_t bit = zynswitch->pin - pin_min;
 			uint8_t state = bitRead(reg, bit);
+#ifdef DEBUG
+			printf("MCP23017 Zynswitch %d => %d\n",i,state);
+#endif
 			if (state != zynswitch->status) {
 				update_zynswitch(i, state);
 				// note that the update function updates status with state
