@@ -52,11 +52,20 @@ enum midi_event_type_enum {
 	//Channel 2-bytes-messages
 	PROG_CHANGE=0xC,
 	CHAN_PRESS=0xD,
+	//System 3-bytes-messages
+	SONG_POSITION=0xF2,
 	//System 2-bytes-messages
 	TIME_CODE_QF=0xF1,
 	SONG_SELECT=0xF3,
 	//System 1-byte messages
+	TUNE_REQUEST=0xF6,
+	TIME_CLOCK=0xF8,
+	MIDI_TICK=0xF9,
+	TRANSPORT_START=0xFA,
+	TRANSPORT_CONTINUE=0xFB,
+	TRANSPORT_STOP=0xFC,
 	ACTIVE_SENSE=0xFE,
+	MIDI_RESET=0xFE,
 	//System Multi-byte (SysEx)
 	SYSTEM_EXCLUSIVE=0xF0
 };
@@ -90,6 +99,8 @@ struct midi_filter_st {
 
 	uint8_t last_ctrl_val[16][128];
 	uint16_t last_pb_val[16];
+
+	uint8_t note_state[16][128];
 };
 struct midi_filter_st midi_filter;
 
@@ -257,8 +268,9 @@ int zynmidi_send_note_on(uint8_t chan, uint8_t note, uint8_t vel);
 int zynmidi_send_ccontrol_change(uint8_t chan, uint8_t ctrl, uint8_t val);
 int zynmidi_send_program_change(uint8_t chan, uint8_t prgm);
 int zynmidi_send_pitchbend_change(uint8_t chan, uint16_t pb);
-
 int zynmidi_send_master_ccontrol_change(uint8_t ctrl, uint8_t val);
+int zynmidi_send_all_notes_off();
+int zynmidi_send_all_notes_off_chan(uint8_t chan);
 
 //-----------------------------------------------------
 // MIDI Controller Feedback <= UI and internal
