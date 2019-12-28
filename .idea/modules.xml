@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="ProjectModuleManager">
+    <modules>
+      <module fileurl="file://$PROJECT_DIR$/.idea/zyncoder.iml" filepath="$PROJECT_DIR$/.idea/zyncoder.iml" />
+      <module fileurl="file://$PROJECT_DIR$/../zynthian-hw/.idea/zynthian-hw.iml" filepath="$PROJECT_DIR$/../zynthian-hw/.idea/zynthian-hw.iml" />
+      <module fileurl="file://$PROJECT_DIR$/../zynthian-sys/.idea/zynthian-sys.iml" filepath="$PROJECT_DIR$/../zynthian-sys/.idea/zynthian-sys.iml" />
+      <module fileurl="file://$PROJECT_DIR$/../zynthian-ui/.idea/zynthian-ui.iml" filepath="$PROJECT_DIR$/../zynthian-ui/.idea/zynthian-ui.iml" />
+      <module fileurl="file://$PROJECT_DIR$/../zynthian-webconf/.idea/zynthian-webconf.iml" filepath="$PROJECT_DIR$/../zynthian-webconf/.idea/zynthian-webconf.iml" />
+    </modules>
+  </component>
+</project>

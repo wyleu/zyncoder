@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="PublishConfigData">
+    <serverData>
+      <paths name="Copy of project-level server 'zynthian-alm.local:22'">
+        <serverdata>
+          <mappings>
+            <mapping local="$PROJECT_DIR$/../zynthian-sys" web="/" />
+            <mapping local="$PROJECT_DIR$" web="/" />
+          </mappings>
+        </serverdata>
+      </paths>
+      <paths name="pi@raspberrypi.local:22">
+        <serverdata>
+          <mappings>
+            <mapping local="$PROJECT_DIR$/../zynthian-sys" web="/" />
+            <mapping local="$PROJECT_DIR$" web="/" />
+          </mappings>
+        </serverdata>
+      </paths>
+      <paths name="root@zynthian-amp2.local:22">
+        <serverdata>
+          <mappings>
+            <mapping local="$PROJECT_DIR$/../zynthian-sys" web="/" />
+            <mapping local="$PROJECT_DIR$" web="/" />
+          </mappings>
+        </serverdata>
+      </paths>
+      <paths name="root@zynthian-nord.local:22">
+        <serverdata>
+          <mappings>
+            <mapping local="$PROJECT_DIR$/../zynthian-sys" web="/" />
+            <mapping local="$PROJECT_DIR$" web="/" />
+          </mappings>
+        </serverdata>
+      </paths>
+      <paths name="zynthian">
+        <serverdata>
+          <mappings>
+            <mapping local="$PROJECT_DIR$/../zynthian-sys" web="/" />
+            <mapping local="$PROJECT_DIR$" web="/" />
+          </mappings>
+        </serverdata>
+      </paths>
+      <paths name="zynthian-nord">
+        <serverdata>
+          <mappings>
+            <mapping local="$PROJECT_DIR$/../zynthian-sys" web="/" />
+            <mapping local="$PROJECT_DIR$" web="/" />
+          </mappings>
+        </serverdata>
+      </paths>
+      <paths name="zynthian-zero">
+        <serverdata>
+          <mappings>
+            <mapping local="$PROJECT_DIR$/../zynthian-sys" web="/" />
+            <mapping local="$PROJECT_DIR$" web="/" />
+          </mappings>
+        </serverdata>
+      </paths>
+    </serverData>
+  </component>
+</project>
