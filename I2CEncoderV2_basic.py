@@ -46,12 +46,12 @@ encconfig = (i2cEncoderLibV2.INT_DATA | i2cEncoderLibV2.WRAP_ENABLE | i2cEncoder
 encoder.begin(encconfig)
 
 encoder.writeCounter(0)
-encoder.writeMax(35)
-encoder.writeMin(-20)
-encoder.writeStep(1)
-encoder.writeAntibouncingPeriod(8)
-encoder.writeDoublePushPeriod(50)
-encoder.writeGammaRLED(i2cEncoderLibV2.GAMMA_2)
+encoder.writeMax(35)                                   # We will go up to 35
+encoder.writeMin(-20)                                  # And down to -20
+encoder.writeStep(1)                                   # With a step size of 1
+encoder.writeAntibouncingPeriod(8)                     # and a bit of anti bounce
+encoder.writeDoublePushPeriod(50)                      # and make a double push
+encoder.writeGammaRLED(i2cEncoderLibV2.GAMMA_2)        # And tune the LED curves
 encoder.writeGammaGLED(i2cEncoderLibV2.GAMMA_2)
 encoder.writeGammaBLED(i2cEncoderLibV2.GAMMA_2)
 
