@@ -10,6 +10,8 @@ import i2cEncoderLibV2
 
 class I2c_RGB(object):
     def __init__(self):
+        self.encoders = {}
+        self.encoder = None
         # Firstly we tell the RaspPi how we want the i/O configured.
         GPIO.setmode(GPIO.BCM)
         # Then we describe the i2C library and the bus we are on.
@@ -54,63 +56,55 @@ class I2c_RGB(object):
         Identify valid encoders.
         :return:
         """
-        self.encoders = {}
-
         for encoder in range(1,127):
             # self.encoder = i2cEncoderLibV2.i2cEncoderLibV2(bus, 0x43)
             try:
                 poss_encoder = i2cEncoderLibV2.i2cEncoderLibV2(self.bus, encoder)
                 poss_encoder.begin(self.encconfig)
+                assert (0x53 == poss_encoder.readIDCode())  # Check for i2c code
                 self.encoders[encoder] = poss_encoder
-            except OSError:
-                pass  # let it pass silently . . .
+            except (AssertionError, IOError):
+                pass
 
-        print('%d Encoders' % (len(self.encoders,)))
-        for count, encoder in enumerate(self.encoders):
-            print(count, encoder )
+        for address, encoder in self.encoders.items():
+            self.config_encoders(encoder)
 
-    def config_encoders(self):
-        for encoder in self.encoders:
-            encoder.begin(self.encconfig)
+    def config_encoders(self, encoder):
 
-            encoder.writeRGBCode(0x320000)
-            sleep(0.3)
+        # Do some higher level setup of other specific information
+        encoder.writeCounter(0)
+        encoder.writeMax(35)                                   # We will go up to 35
+        encoder.writeMin(-20)                                  # And down to -20
+        encoder.writeStep(1)                                   # With a step size of 1
+        encoder.writeAntibouncingPeriod(8)                     # and a bit of anti bounce
+        encoder.writeDoublePushPeriod(50)                      # and make a double push
+        encoder.writeGammaRLED(i2cEncoderLibV2.GAMMA_2)        # And tune the LED curves
+        encoder.writeGammaGLED(i2cEncoderLibV2.GAMMA_2)
+        encoder.writeGammaBLED(i2cEncoderLibV2.GAMMA_2)
 
-            # Do some higher level setup of other specific information
-            encoder.writeCounter(0)
-            encoder.writeMax(35)                                   # We will go up to 35
-            encoder.writeMin(-20)                                  # And down to -20
-            encoder.writeStep(1)                                   # With a step size of 1
-            encoder.writeAntibouncingPeriod(8)                     # and a bit of anti bounce
-            encoder.writeDoublePushPeriod(50)                      # and make a double push
-            encoder.writeGammaRLED(i2cEncoderLibV2.GAMMA_2)        # And tune the LED curves
-            encoder.writeGammaGLED(i2cEncoderLibV2.GAMMA_2)
-            encoder.writeGammaBLED(i2cEncoderLibV2.GAMMA_2)
+        encoder.onChange = self.EncoderChange
+        # encoder.onButtonPush = self.EncoderPush
 
-            encoder.onChange = self.EncoderChange
-            encoder.onButtonPush = self.EncoderPush
+        encoder.autoconfigInterrupt()
 
-            encoder.autoconfigInterrupt()
+        encoder.writeRGBCode(0x003200)
+        sleep(0.3)
 
-            encoder.writeRGBCode(0x003200)
-            sleep(0.3)
-
-            print ('Board ID code: 0x%X' % (encoder.readIDCode()))
-            print ('Board Version: 0x%X' % (encoder.readVersion()))
-
-            encoder.writeRGBCode(0x000000)
+        encoder.writeRGBCode(0x000000)
 
 
     def update_status(self, event):
-        # Call the update Status function defined in the
+        # Call the updateStatus function defined in the
         # i2cEncoderLibV2 library which will put all the values in
         # the python variables that we can then react to.
-        print('Hi!', event)
-        self.encoder.updateStatus()
+        for address, encoder in self.encoders.items():
+            self.encoder = encoder  # select current encoder
+            if encoder.updateStatus():
+                print('Its encoder :-', address)
 
     def EncoderChange(self):
         self.encoder.writeLEDG(100)
-        print('Changed: %d' % (self.encoder.readCounter32()))
+        print('Changed: %d ' % (self.encoder.readCounter32()))
         self.encoder.writeLEDG(0)
 
     def EncoderPush(self):
