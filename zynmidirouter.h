@@ -43,6 +43,7 @@ enum midi_event_type_enum {
 	SWAP_EVENT=-3,
 	IGNORE_EVENT=-2,
 	THRU_EVENT=-1,
+	NONE_EVENT=0,
 	//Channel 3-bytes-messages
 	NOTE_OFF=0x8,
 	NOTE_ON=0x9,
@@ -59,15 +60,16 @@ enum midi_event_type_enum {
 	SONG_SELECT=0xF3,
 	//System 1-byte messages
 	TUNE_REQUEST=0xF6,
+	//System Real-Time
 	TIME_CLOCK=0xF8,
-	MIDI_TICK=0xF9,
 	TRANSPORT_START=0xFA,
 	TRANSPORT_CONTINUE=0xFB,
 	TRANSPORT_STOP=0xFC,
 	ACTIVE_SENSE=0xFE,
-	MIDI_RESET=0xFE,
+	MIDI_RESET=0xFF,
 	//System Multi-byte (SysEx)
-	SYSTEM_EXCLUSIVE=0xF0
+	SYSTEM_EXCLUSIVE=0xF0,
+	END_SYSTEM_EXCLUSIVE=0xF7,
 };
 
 struct midi_event_st {
@@ -84,14 +86,22 @@ struct mf_arrow_st {
 	enum midi_event_type_enum type;
 };
 
+struct mf_clone_st {
+	int enabled;
+	uint8_t cc[128];
+};
+
+static uint8_t default_cc_to_clone[]={ 1, 2, 64, 65, 66, 67, 68 };
+
 struct midi_filter_st {
 	int tuning_pitchbend;
 	int master_chan;
 	int active_chan;
+	int last_active_chan;
 	int auto_relmode;
 
 	int transpose[16];
-	int clone[16][16];
+	struct mf_clone_st clone[16][16];
 	struct midi_event_st event_map[8][16][128];
 
 	uint8_t ctrl_mode[16][128];
@@ -130,6 +140,9 @@ int get_midi_filter_transpose(uint8_t chan);
 void set_midi_filter_clone(uint8_t chan_from, uint8_t chan_to, int v);
 int get_midi_filter_clone(uint8_t chan_from, uint8_t chan_to);
 void reset_midi_filter_clone(uint8_t chan_from);
+void set_midi_filter_clone_cc(uint8_t chan_from, uint8_t chan_to, uint8_t cc[128]);
+uint8_t *get_midi_filter_clone_cc(uint8_t chan_from, uint8_t chan_to);
+void reset_midi_filter_clone_cc(uint8_t chan_from, uint8_t chan_to);
 
 //MIDI Filter Core functions
 void set_midi_filter_event_map_st(struct midi_event_st *ev_from, struct midi_event_st *ev_to);
@@ -196,14 +209,16 @@ uint8_t get_midi_filter_cc_swap(uint8_t chan, uint8_t num);
 #define ZMOP_CH13 16
 #define ZMOP_CH14 17
 #define ZMOP_CH15 18
-#define ZMOP_CTRL 19
-#define MAX_NUM_ZMOPS 20
+#define ZMOP_STEP 19
+#define ZMOP_CTRL 20
+#define MAX_NUM_ZMOPS 21
 
 #define ZMIP_MAIN 0
 #define ZMIP_NET 1
 #define ZMIP_SEQ 2
 #define ZMIP_CTRL 3
-#define MAX_NUM_ZMIPS 4
+#define ZMIP_STEP 4
+#define MAX_NUM_ZMIPS 5
 
 #define ZMOP_MAIN_FLAGS (FLAG_ZMOP_TUNING)
 
@@ -293,7 +308,10 @@ int init_zynmidi_buffer();
 int write_zynmidi(uint32_t ev);
 uint32_t read_zynmidi();
 
-int write_zynmidi_ccontrol_change(uint8_t chan, uint8_t ctrl, uint8_t val);
+int write_zynmidi_ccontrol_change(uint8_t chan, uint8_t num, uint8_t val);
+int write_zynmidi_note_on(uint8_t chan, uint8_t num, uint8_t val);
+int write_zynmidi_note_off(uint8_t chan, uint8_t num, uint8_t val);
+int write_zynmidi_program_change(uint8_t chan, uint8_t num);
 
 //-----------------------------------------------------------------------------
 // MIDI Controller Auto-Mode (Absolut <=> Relative)

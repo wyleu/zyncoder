@@ -35,7 +35,6 @@
 #include <jack/ringbuffer.h>
 #include <lo/lo.h>
 
-#include "zynmidirouter.h"
 #include "zyncoder.h"
 
 //-----------------------------------------------------------------------------
@@ -66,6 +65,7 @@ int init_midi_router() {
 
 	midi_filter.master_chan=-1;
 	midi_filter.active_chan=-1;
+	midi_filter.last_active_chan=-1;
 	midi_filter.tuning_pitchbend=-1;
 	midi_learning_mode=0;
 	midi_ctrl_automode=1;
@@ -76,7 +76,11 @@ int init_midi_router() {
 	}
 	for (i=0;i<16;i++) {
 		for (j=0;j<16;j++) {
-			midi_filter.clone[i][j]=0;
+			midi_filter.clone[i][j].enabled=0;
+			memset(midi_filter.clone[i][j].cc, 0, 128);
+			for (k=0;k<sizeof(default_cc_to_clone);k++) {
+				midi_filter.clone[i][j].cc[default_cc_to_clone[k] & 0x7F]=1;
+			}
 		}
 	}
 	for (i=0;i<8;i++) {
@@ -88,14 +92,10 @@ int init_midi_router() {
 			}
 		}
 	}
-	for (i=0;i<16;i++) {
-		for (j=0;j<128;j++) {
-			midi_filter.ctrl_mode[i][j]=0;
-			midi_filter.ctrl_relmode_count[i][j]=0;
-			midi_filter.last_ctrl_val[i][j]=0;
-			midi_filter.note_state[i][j]=0;
-		}
-	}
+	memset(midi_filter.ctrl_mode, 0, 16*128);
+	memset(midi_filter.ctrl_relmode_count, 0, 16*128);
+	memset(midi_filter.last_ctrl_val, 0, 16*128);
+	memset(midi_filter.note_state, 0, 16*128);
 
 	return 1;
 }
@@ -117,13 +117,18 @@ void set_midi_master_chan(int chan) {
 int get_midi_master_chan() {
 	return midi_filter.master_chan;
 }
+
 void set_midi_active_chan(int chan) {
 	if (chan>15 || chan<-1) {
 		fprintf (stderr, "ZynMidiRouter: MIDI Active channel (%d) is out of range!\n",chan);
 		return;
 	}
-	midi_filter.active_chan=chan;
+	if (chan!=midi_filter.active_chan) {
+		midi_filter.last_active_chan=midi_filter.active_chan;
+		midi_filter.active_chan=chan;
+	}
 }
+
 int get_midi_active_chan() {
 	return midi_filter.active_chan;
 }
@@ -183,7 +188,7 @@ void set_midi_filter_clone(uint8_t chan_from, uint8_t chan_to, int v) {
 		fprintf (stderr, "ZynMidiRouter: MIDI clone chan_to (%d) is out of range!\n",chan_to);
 		return;
 	}
-	midi_filter.clone[chan_from][chan_to]=v;
+	midi_filter.clone[chan_from][chan_to].enabled=v;
 }
 
 int get_midi_filter_clone(uint8_t chan_from, uint8_t chan_to) {
@@ -195,7 +200,7 @@ int get_midi_filter_clone(uint8_t chan_from, uint8_t chan_to) {
 		fprintf (stderr, "ZynMidiRouter: MIDI clone chan_to (%d) is out of range!\n",chan_to);
 		return 0;
 	}
-	return midi_filter.clone[chan_from][chan_to];
+	return midi_filter.clone[chan_from][chan_to].enabled;
 }
 
 void reset_midi_filter_clone(uint8_t chan_from) {
@@ -203,11 +208,61 @@ void reset_midi_filter_clone(uint8_t chan_from) {
 		fprintf (stderr, "ZynMidiRouter: MIDI clone chan_from (%d) is out of range!\n",chan_from);
 		return;
 	}
-	int j;
+	int j, k;
 	for (j=0;j<16;j++) {
-		midi_filter.clone[chan_from][j]=0;
+		midi_filter.clone[chan_from][j].enabled=0;
+		memset(midi_filter.clone[chan_from][j].cc, 0, 128);
+		for (k=0;k<sizeof(default_cc_to_clone);k++) {
+			midi_filter.clone[chan_from][j].cc[default_cc_to_clone[k] & 0x7F]=1;
+		}
 	}
 }
+
+void set_midi_filter_clone_cc(uint8_t chan_from, uint8_t chan_to, uint8_t cc[128]) {
+	if (chan_from>15) {
+		fprintf (stderr, "ZynMidiRouter: MIDI clone chan_from (%d) is out of range!\n",chan_from);
+		return;
+	}
+	if (chan_to>15) {
+		fprintf (stderr, "ZynMidiRouter: MIDI clone chan_to (%d) is out of range!\n",chan_to);
+		return;
+	}
+	int i;
+	for (i=0; i<128; i++) {
+		midi_filter.clone[chan_from][chan_to].cc[i]=cc[i];
+	}
+}
+
+uint8_t *get_midi_filter_clone_cc(uint8_t chan_from, uint8_t chan_to) {
+	if (chan_from>15) {
+		fprintf (stderr, "ZynMidiRouter: MIDI clone chan_from (%d) is out of range!\n",chan_from);
+		return NULL;
+	}
+	if (chan_to>15) {
+		fprintf (stderr, "ZynMidiRouter: MIDI clone chan_to (%d) is out of range!\n",chan_to);
+		return NULL;
+	}
+	return midi_filter.clone[chan_from][chan_to].cc;
+}
+
+
+void reset_midi_filter_clone_cc(uint8_t chan_from, uint8_t chan_to) {
+	if (chan_from>15) {
+		fprintf (stderr, "ZynMidiRouter: MIDI clone chan_from (%d) is out of range!\n",chan_from);
+		return;
+	}
+	if (chan_to>15) {
+		fprintf (stderr, "ZynMidiRouter: MIDI clone chan_to (%d) is out of range!\n",chan_to);
+		return;
+	}
+
+	int i;
+	memset(midi_filter.clone[chan_from][chan_to].cc, 0, 128);
+	for (i=0;i<sizeof(default_cc_to_clone);i++) {
+		midi_filter.clone[chan_from][chan_to].cc[default_cc_to_clone[i] & 0x7F]=1;
+	}
+}
+
 
 //Core MIDI filter functions
 
@@ -633,6 +688,7 @@ int init_jack_midi(char *name) {
 	if (!zmop_init(ZMOP_MIDI,"midi_out",-1,0)) return 0;
 	if (!zmop_init(ZMOP_NET,"net_out",-1,0)) return 0;
 	if (!zmop_init(ZMOP_CTRL,"ctrl_out",-1,0)) return 0;
+	if (!zmop_init(ZMOP_STEP,"step_out",-1,ZMOP_MAIN_FLAGS)) return 0;
 	char port_name[12];
 	for (i=0;i<16;i++) {
 		sprintf(port_name,"ch%d_out",i);
@@ -644,14 +700,18 @@ int init_jack_midi(char *name) {
 	if (!zmip_init(ZMIP_NET,"net_in",ZMIP_MAIN_FLAGS)) return 0;
 	if (!zmip_init(ZMIP_SEQ,"seq_in",ZMIP_SEQ_FLAGS)) return 0;
 	if (!zmip_init(ZMIP_CTRL,"ctrl_in",ZMIP_CTRL_FLAGS)) return 0;
-	
+	if (!zmip_init(ZMIP_STEP,"step_in",ZMIP_MAIN_FLAGS)) return 0;
+
 	//Route Input to Output Ports
 	for (i=0;i<ZMOP_CTRL;i++) {
 		if (!zmip_set_forward(ZMIP_MAIN, i, 1)) return 0;
+		if (!zmip_set_forward(ZMIP_SEQ, i, 1)) return 0;
 		if (i!=ZMOP_NET) {
 			if (!zmip_set_forward(ZMIP_NET, i, 1)) return 0;
 		}
-		if (!zmip_set_forward(ZMIP_SEQ, i, 1)) return 0;
+		if (i!=ZMOP_STEP) {
+			if (!zmip_set_forward(ZMIP_STEP, i, 1)) return 0;
+		}
 	}
 	// ZMOP_CTRL is not forwarded from any input port, only receive feedback from Zynthian UI
 	// ZMIP_CTRL is not routed to any output port, only captured by Zynthian UI
@@ -733,6 +793,7 @@ int jack_process_zmip(int iz, jack_nframes_t nframes) {
 		//Clone from last event ...
 		if (clone_from_chan>=0 && clone_to_chan>=0 && clone_to_chan<16) {
 			event_chan=clone_to_chan;
+			event_type=ev.buffer[0] >> 4;
 			ev.buffer[0]=(event_type << 4) | event_chan;
 			//fprintf (stdout, "CLONE %x => %d, %d\n",event_type, clone_from_chan, clone_to_chan);
 			clone_to_chan++;
@@ -752,22 +813,6 @@ int jack_process_zmip(int iz, jack_nframes_t nframes) {
 			else {
 				event_type=ev.buffer[0] >> 4;
 				event_chan=ev.buffer[0] & 0xF;
-
-				//Capture events for UI: MASTER CHANNEL
-				if ((zmip->flags & FLAG_ZMIP_UI) && event_chan==midi_filter.master_chan) {
-					write_zynmidi((ev.buffer[0]<<16)|(ev.buffer[1]<<8)|(ev.buffer[2]));
-					continue;
-				}
-				//Active Channel => When set, move all channel events to active_chan
-				if (current_midi_filter_active_chan>=0) {
-					ev.buffer[0]=(ev.buffer[0] & 0xF0) | (current_midi_filter_active_chan & 0x0F);
-					event_chan=current_midi_filter_active_chan;
-				}
-				//Capture events for UI: Program Change
-				if ((zmip->flags & FLAG_ZMIP_UI) && event_type==PROG_CHANGE) {
-					write_zynmidi((ev.buffer[0]<<16)|(ev.buffer[1]<<8)|(ev.buffer[2]));
-					continue;
-				}
 			}
 
 			//Get event details depending of event type & size
@@ -791,8 +836,37 @@ int jack_process_zmip(int iz, jack_nframes_t nframes) {
 				event_num=event_val=0;
 			}
 
+			if (ev.buffer[0]<SYSTEM_EXCLUSIVE && event_chan!=midi_filter.master_chan) {
+				//Active Channel => When set, move all channel events to active_chan
+				if (current_midi_filter_active_chan>=0) {
+					int destiny_chan=current_midi_filter_active_chan;
+
+					// TODO: Exclude if it's a cloned channel ...
+					if (midi_filter.last_active_chan>=0 && !midi_filter.clone[destiny_chan][midi_filter.last_active_chan].enabled) { 
+						//Manage sustained notes across active channel change (only last change!)
+						if ((event_type==NOTE_OFF || (event_type==NOTE_ON && event_val==0)) && midi_filter.note_state[midi_filter.last_active_chan][event_num]>0) {
+							destiny_chan=midi_filter.last_active_chan;
+							//zynmidi_send_note_off(midi_filter.last_active_chan, event_num, event_val);
+						}
+						//Manage sustain pedal across active_channel changes (all changes!)
+						else if (event_type==CTRL_CHANGE && event_num==64) {
+							for (j=0; j<16; j++) {
+								if (j!=destiny_chan && midi_filter.last_ctrl_val[j][64]>0) {
+									zynmidi_send_ccontrol_change(j, 64, event_val);
+								}
+							}
+						}
+						else if (event_type==NOTE_ON && event_val>0 &&  midi_filter.last_ctrl_val[midi_filter.last_active_chan][64]>midi_filter.last_ctrl_val[destiny_chan][64]) {
+							zynmidi_send_ccontrol_change(destiny_chan, 64, midi_filter.last_ctrl_val[midi_filter.last_active_chan][64]);
+						}
+					}
+					ev.buffer[0]=(ev.buffer[0] & 0xF0) | (destiny_chan & 0x0F);
+					event_chan=destiny_chan;
+				}
+			}
+
 			//Is it a clonable event?
-			if ((zmip->flags & FLAG_ZMIP_CLONE) && (event_type==NOTE_OFF || event_type==NOTE_ON || event_type==PITCH_BENDING || event_type==KEY_PRESS || event_type==CHAN_PRESS)) {
+			if ((zmip->flags & FLAG_ZMIP_CLONE) && (event_type==NOTE_OFF || event_type==NOTE_ON || event_type==PITCH_BENDING || event_type==KEY_PRESS || event_type==CHAN_PRESS || event_type==CTRL_CHANGE)) {
 				clone_from_chan=event_chan;
 				clone_to_chan=0;
 			}
@@ -804,7 +878,9 @@ int jack_process_zmip(int iz, jack_nframes_t nframes) {
 
 		//Check for next clone_to channel ...
 		if (clone_from_chan>=0 && clone_to_chan>=0) {
-			while (clone_to_chan<16 && !midi_filter.clone[clone_from_chan][clone_to_chan]) clone_to_chan++;
+			while (clone_to_chan<16 && (!midi_filter.clone[clone_from_chan][clone_to_chan].enabled || (event_type==CTRL_CHANGE && !midi_filter.clone[clone_from_chan][clone_to_chan].cc[event_num]))) {
+				clone_to_chan++;
+			}
 			//fprintf (stdout, "NEXT CLONE %x => %d, %d\n",event_type, clone_from_chan, clone_to_chan);
 		}
 
@@ -850,7 +926,13 @@ int jack_process_zmip(int iz, jack_nframes_t nframes) {
 			}
 		}
 
-		//MIDI CC messages
+		//Capture events for UI: MASTER CHANNEL + Program Change
+		if ((zmip->flags & FLAG_ZMIP_UI) && (event_chan==midi_filter.master_chan || event_type==PROG_CHANGE)) {
+			write_zynmidi((ev.buffer[0]<<16)|(ev.buffer[1]<<8)|(ev.buffer[2]));
+			continue;
+		}
+
+		//MIDI CC messages => TODO: Clone behaviour?!!
 		if (event_type==CTRL_CHANGE) {
 
 			//Auto Relative-Mode
@@ -903,7 +985,7 @@ int jack_process_zmip(int iz, jack_nframes_t nframes) {
 			//}
 		}
 
-		//Transpose Note-on/off messages
+		//Transpose Note-on/off messages => TODO: Bizarre clone behaviour?
 		else if ((zmip->flags & FLAG_ZMIP_TRANSPOSE) && midi_filter.transpose[event_chan]!=0) {
 			if (event_type==NOTE_OFF || event_type==NOTE_ON) {
 				int note=ev.buffer[1]+midi_filter.transpose[event_chan];
@@ -946,7 +1028,7 @@ int jack_process_zmip(int iz, jack_nframes_t nframes) {
 		if (event_type==NOTE_ON) midi_filter.note_state[event_chan][event_num]=event_val;
 		else if (event_type==NOTE_OFF) midi_filter.note_state[event_chan][event_num]=0;
 
-		//Capture events for UI: after filtering => [Note-Off, Note-On, Control-Change]
+		//Capture events for UI: after filtering => [Note-Off, Note-On, Control-Change, SysEx]
 		if (!ui_event && (zmip->flags & FLAG_ZMIP_UI) && (event_type==NOTE_OFF || event_type==NOTE_ON || event_type==CTRL_CHANGE || event_type>=SYSTEM_EXCLUSIVE)) {
 			ui_event=(ev.buffer[0]<<16)|(ev.buffer[1]<<8)|(ev.buffer[2]);
 		}
@@ -1384,10 +1466,24 @@ uint32_t read_zynmidi() {
 // MIDI Internal Output: Send Functions => UI
 //-----------------------------------------------------------------------------
 
-int write_zynmidi_ccontrol_change(uint8_t chan, uint8_t ctrl, uint8_t val) {
-	uint32_t ev = ((0xB0 | (chan & 0x0F)) << 16) | (ctrl << 8) | val;
+int write_zynmidi_ccontrol_change(uint8_t chan, uint8_t num, uint8_t val) {
+	uint32_t ev = ((0xB0 | (chan & 0x0F)) << 16) | (num << 8) | val;
 	return write_zynmidi(ev);
 }
 
+int write_zynmidi_note_on(uint8_t chan, uint8_t num, uint8_t val) {
+	uint32_t ev = ((0x90 | (chan & 0x0F)) << 16) | (num << 8) | val;
+	return write_zynmidi(ev);
+}
+
+int write_zynmidi_note_off(uint8_t chan, uint8_t num, uint8_t val) {
+	uint32_t ev = ((0x80 | (chan & 0x0F)) << 16) | (num << 8) | val;
+	return write_zynmidi(ev);
+}
+
+int write_zynmidi_program_change(uint8_t chan, uint8_t num) {
+	uint32_t ev = ((0xC0 | (chan & 0x0F)) << 16) | (num << 8);
+	return write_zynmidi(ev);
+}
 
 //-----------------------------------------------------------------------------
